@@ -95,7 +95,7 @@ def main(args):
 
     for sf in signal_files:
         fig,ax = plt.subplots()
-        signal_dfs[sf] = get_data_frame(f"samples/{sf}.root")
+        signal_dfs[sf] = get_data_frame(f"samples/better_scatter_plot/{sf}.root")
         if ax:
             signal_dfs[sf].plot(kind='scatter', x=x_var, y=y_var, color=signal_colors[sf], ax=ax, alpha=0.2)
         else:
@@ -109,7 +109,7 @@ def main(args):
         ax.set_ylabel(y_var)
         ax.legend()
         ax.grid(True)
-        fig.savefig("plot_{}.png".format(sf.replace(".root","")))
+        fig.savefig("plots/better_scatter_plot/plot_{}.png".format(sf.replace(".root","")))
 
 
 
