@@ -20,9 +20,6 @@ plt.rcParams.update({"font.size": 18})
 sample_root_dir="samples/v07UFO"
 N_max=400
 
-# topology="resolved"
-# topology="merged"
-
 class Sample():
 
     def __init__(self, name, sample_list, topology):
@@ -37,17 +34,21 @@ class Sample():
         file = uproot.open(file_name)
         tree = file[f"{file_name.split('/')[-1].replace('.conf.root','')}_Nominal;1"]
         if self.topology=="resolved":
+            # weight = "Weights*GenWeight*GenWeightMCSampleMerging*EleWeight*MuoWeight*TauWeight*JetWeightJVT*JetWeightBTag*MET_TriggerSF*Znunu_Normalization*Znunu_Merging"
+            weight = "GenWeightMCSampleMerging*EleWeight*MuoWeight*TauWeight*MET_TriggerSF*Znunu_Normalization*Znunu_Merging"
             pt_higgs="pt_jj_corr"
         elif self.topology=="merged":
             pt_higgs="pt_J_corr"
-        df = tree.arrays( ["Met",pt_higgs], library="pd")
+            # weight = "Weights*GenWeight*GenWeightMCSampleMerging*EleWeight*MuoWeight*TauWeight*TrackJetWeight*MET_TriggerSF*Znunu_Normalization*Znunu_Merging"
+            weight = "GenWeightMCSampleMerging*EleWeight*MuoWeight*TauWeight*TrackJetWeight*MET_TriggerSF*Znunu_Normalization*Znunu_Merging"
+        df = tree.arrays( ["Met",pt_higgs,weight], library="pd")
         if self.topology=="resolved":
             df = df[df["Met"]<500]
             # df = df[df["Met"]>500]
         elif self.topology=="merged":
             # df = df[df["Met"]<500]
             df = df[df["Met"]>500]
-        df=df.rename(columns={pt_higgs:"pt_higgs"})
+        df=df.rename(columns={pt_higgs:"pt_higgs", weight:"weight"})
         return df
 
     def read_sample_list(self):
@@ -65,7 +66,6 @@ class Sample():
         if len(self.data)>0:
             self.data["metpt"]=self.data.apply(lambda row: row["Met"]/row["pt_higgs"], axis=1)
         print(f"Loaded {len(self.data)} events from {self.name}!")
-        # print(self.data.corr())
 
 
 
@@ -209,12 +209,12 @@ def get_samples(base_path, topology):
         ])
 
     # return (VHbb, Diboson, stop, ttbar, Zjets, Wjets, signal_mzp3500_dm200_dh150, signal_mzp3500_dm200_dh50, signal_mzp500_dm200_dh150, signal_mzp500_dm200_dh50)
-    return (ttbar, Zjets, Wjets, signal_mzp3500_dm200_dh50)
+    # return (ttbar, Zjets, Wjets, signal_mzp3500_dm200_dh50)
     # return (VHbb, Diboson, stop, ttbar, Zjets, Wjets, signal_mzp3500_dm200_dh150)
     # return (ttbar, Zjets, Wjets, signal_mzp3500_dm200_dh150)
     # return (ttbar, Zjets, Wjets, signal_mzp3500_dm200_dh150)
     # return (ttbar, Zjets, signal_mzp500_dm200_dh150)
-    # return (Zjets, signal_mzp3500_dm200_dh150)
+    return (Zjets, signal_mzp3500_dm200_dh150)
     # return (signal_mzp3500_dm200_dh150, Zjets)
     # return (Zjets,)
     # return (signal_mzp3500_dm200_dh150,)
@@ -224,46 +224,28 @@ def get_samples(base_path, topology):
     # return (signal_mzp500_dm200_dh50,)
 
 
-def plot_samples(data):
-    # g = sns.pairplot(data, hue="sample", diag_kind="hist")
-    # g.map_lower(sns.kdeplot, levels=[0.1,0.5])
-
-    # sns.pairplot(data, kind="kde", hue="sample", diag_kind="hist", levels=[0.1,0.5])
-    # sns.pairplot(data, kind="kde", hue="sample_type", diag_kind="hist")
-    # sns.pairplot(data, hue="sample", diag_kind="hist")
-    # sns.kdeplot(data=data, x="Met", y=pt_higgs, hue="sample_type", levels=[0.1,0.5,0.9])
-    # sns.kdeplot(data=data, x="Met", y=pt_higgs, hue="sample", levels=[0.1])
-    # sns.scatterplot(data=data, x="Met", y=pt_higgs, hue="sample")
-
-    # f = plt.figure(figsize=(19, 15))
-    # plt.matshow(data.corr(), fignum=f.number)
-
-    # ax = sns.regplot(x="Met", y="met/pt", data=data)
-    # data.plot.hist(bins=40)
-
-    # test=pd.DataFrame()
-    # for samp_name in data["sample"].unique():
-    #     tmp=data[data["sample"]==samp_name]["metpt"].copy(deep=True)
-    #     test[samp_name]=tmp.values
-    #     test[samp_name]=tmp.values
-    # # test.plot.density()
-    # test.plot(kind="kde")
-    # sns.kdeplot(data=[data[data["sample"]==samp for samp in data["sample"].unique()], x="metpt", hue="sample")
-    is_signal=(data["sample"] == "mzp3500_dh50_merged") | (data["sample"] == "mzp3500_dh50_resolved")
-    sns.kdeplot(data=data[is_signal], x="metpt", hue="sample", fill=True, common_norm=False)
-    sns.kdeplot(data=data[~is_signal], x="metpt", hue="sample", palette="tab20", common_norm=False)
-    plt.show()
-
 def make_scatter_plots(data):
     sample_list=data["sample"].unique()
     straight_line=np.linspace(0,1500,10)
     for n, samp_name in enumerate(sample_list):
         if "merged" in samp_name: continue
-        fig=plt.figure()
-        sns.scatterplot(data=data[data["sample"]==samp_name], x="Met", y="pt_higgs", hue="sample")
-        sns.scatterplot(data=data[data["sample"]==samp_name.replace("resolved","merged")], x="Met", y="pt_higgs", hue="sample", palette="inferno")
-        plt.plot(straight_line, straight_line, "r-")
-        fig.savefig(f"plots/contour_plots/recycled_{samp_name}.png")
+        fig, ax = plt.subplots()
+        sns.scatterplot(data=data[data["sample"]==samp_name], x="Met", y="pt_higgs", hue="sample", ax=ax)
+        sns.scatterplot(data=data[data["sample"]==samp_name.replace("resolved","merged")], x="Met", y="pt_higgs", hue="sample", palette="inferno", ax=ax)
+        ax.plot(straight_line, straight_line, "r-")
+        fig.savefig(f"plots/contour_plots/scatter_plot_{samp_name}.png")
+
+def kde_plot(data):
+    fig, ax = plt.subplots()
+    sns.kdeplot(data=data, x="metpt", hue="sample", weights=data["weight"], alpha=0.5, ax=ax, palette="tab20", common_norm=False)
+    fig.savefig(f"plots/contour_plots/kde_plot.png")
+
+def correlation_plot(data):
+    fig, ax = plt.subplots()
+    sns.kdeplot(data=data, x="Met", y="pt_higgs", levels=[0.1], hue="sample", weights=data["weight"], alpha=0.5, ax=ax, palette="tab20", common_norm=False)
+    fig.savefig(f"plots/contour_plots/correlation_plot.png")
+
+
 
 def main():
     total_data=pd.DataFrame()
@@ -274,8 +256,11 @@ def main():
             total_data=total_data.append(samp.data)
             del samp
 
-    plot_samples(total_data)
+    # plot_density(total_data)
     # make_scatter_plots(total_data)
+    # kde_plot(total_data)
+    # correlation_plot((total_data))
+    # plt.show()
 
 
 if __name__ == "__main__":
