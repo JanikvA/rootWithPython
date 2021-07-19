@@ -5,6 +5,7 @@
 Contour plots from TTrees
 """
 
+from functools import update_wrapper
 import os
 import uproot
 import pandas as pd
@@ -18,7 +19,7 @@ from uproot.interpretation import library
 # matplotlib.use('qt5agg')
 plt.rcParams.update({"font.size": 18})
 sample_root_dir="samples/v07UFO"
-N_max=400
+N_max=2000
 
 class Sample():
 
@@ -64,8 +65,22 @@ class Sample():
         self.data=self.data.sample(frac=1)
         self.data=self.data[:N_max]
         if len(self.data)>0:
-            self.data["metpt"]=self.data.apply(lambda row: row["Met"]/row["pt_higgs"], axis=1)
-        print(f"Loaded {len(self.data)} events from {self.name}!")
+            self.data["metpt_ratio"]=self.data.apply(lambda row: row["Met"]/row["pt_higgs"], axis=1)
+            self.data["metpt_diff"]=self.data.apply(lambda row: row["Met"]-row["pt_higgs"], axis=1)
+            # # band=60
+            # band=180
+            # if self.topology=="merged":
+            #     # band=180
+            #     band=60
+            # # a=1.2
+            # # b=40
+            # # upper= a*self.data["Met"]+b
+            # # lower= self.data["Met"]*(2-a)-b
+            # lincomb_eff=len(self.data[(self.data["pt_higgs"]<band+self.data["Met"]) & (self.data["pt_higgs"]>self.data["Met"]-band)]) / len(self.data)
+            # metpt_eff=len(self.data[(self.data["metpt"]<1.3) & (self.data["metpt"]>0.8)]) / len(self.data)
+            # print(f"{self.name}: {lincomb_eff/metpt_eff:.3f} ({lincomb_eff=:.2f}/{metpt_eff=:.2f})")
+            # print("linear comb cut efficiency: ",len(self.data[(self.data["pt_higgs"]<upper) & (self.data["pt_higgs"]>lower)]) / len(self.data))
+        # print(f"Loaded {len(self.data)} events from {self.name}!")
 
 
 
@@ -209,14 +224,17 @@ def get_samples(base_path, topology):
         ])
 
     # return (VHbb, Diboson, stop, ttbar, Zjets, Wjets, signal_mzp3500_dm200_dh150, signal_mzp3500_dm200_dh50, signal_mzp500_dm200_dh150, signal_mzp500_dm200_dh50)
+    return ( ttbar, Zjets, Wjets, signal_mzp3500_dm200_dh150, signal_mzp3500_dm200_dh50, signal_mzp500_dm200_dh150, signal_mzp500_dm200_dh50)
     # return (ttbar, Zjets, Wjets, signal_mzp3500_dm200_dh50)
     # return (VHbb, Diboson, stop, ttbar, Zjets, Wjets, signal_mzp3500_dm200_dh150)
     # return (ttbar, Zjets, Wjets, signal_mzp3500_dm200_dh150)
     # return (ttbar, Zjets, Wjets, signal_mzp3500_dm200_dh150)
     # return (ttbar, Zjets, signal_mzp500_dm200_dh150)
-    return (Zjets, signal_mzp3500_dm200_dh150)
+    # return (Zjets, signal_mzp3500_dm200_dh150)
     # return (signal_mzp3500_dm200_dh150, Zjets)
+    # return (VHbb,)
     # return (Zjets,)
+    # return (signal_mzp3500_dm200_dh50, signal_mzp500_dm200_dh50)
     # return (signal_mzp3500_dm200_dh150,)
     # return (signal_mzp3500_dm200_dh150, signal_mzp3500_dm200_dh50, signal_mzp500_dm200_dh150, signal_mzp500_dm200_dh50)
     # return (signal_mzp3500_dm200_dh150, signal_mzp3500_dm200_dh50)
@@ -227,21 +245,52 @@ def get_samples(base_path, topology):
 def make_scatter_plots(data):
     sample_list=data["sample"].unique()
     straight_line=np.linspace(0,1500,10)
+    band=100
+    straight_lower=np.linspace(0-band,1500-band,10)
+    straight_upper=np.linspace(0+band,1500+band,10)
     for n, samp_name in enumerate(sample_list):
         if "merged" in samp_name: continue
         fig, ax = plt.subplots()
         sns.scatterplot(data=data[data["sample"]==samp_name], x="Met", y="pt_higgs", hue="sample", ax=ax)
         sns.scatterplot(data=data[data["sample"]==samp_name.replace("resolved","merged")], x="Met", y="pt_higgs", hue="sample", palette="inferno", ax=ax)
+        # sns.contour(data=data[data["sample"]==samp_name], x="Met", y="pt_higgs", hue="sample", ax=ax)
+        # sns.contour(data=data[data["sample"]==samp_name.replace("resolved","merged")], x="Met", y="pt_higgs", weights=data["weights"], levels=[0.1], hue="sample", palette="inferno", common_norm=True, ax=ax)
+        # sns.contour(data=data, x="Met", y="pt_higgs", weights=data["weights"], levels=[0.1], hue="sample", palette="inferno", common_norm=True, ax=ax)
         ax.plot(straight_line, straight_line, "r-")
+        ax.plot(straight_line, straight_upper, "b-")
+        ax.plot(straight_line, straight_lower, "b-")
         fig.savefig(f"plots/contour_plots/scatter_plot_{samp_name}.png")
 
-def kde_plot(data):
-    fig, ax = plt.subplots()
-    sns.kdeplot(data=data, x="metpt", hue="sample", weights=data["weight"], alpha=0.5, ax=ax, palette="tab20", common_norm=False)
-    fig.savefig(f"plots/contour_plots/kde_plot.png")
+def kde_plot(data, x_var):
+    for topo in ["resolved" ,"merged"]:
+        fig, ax = plt.subplots(figsize=(13,10))
+        tmp_data=data[data["sample"].str.contains(topo)]
+        tmp_data=tmp_data[(tmp_data["metpt_ratio"]>0.7) & (tmp_data["metpt_ratio"]<1.3)]
+        signals=[]
+        if topo=="merged":
+            signals=[f"mzp500_dh50_{topo}", f"mzp500_dh150_{topo}"]
+        elif topo=="resolved":
+            signals=[f"mzp3500_dh50_{topo}", f"mzp3500_dh150_{topo}"]
+        tmp_data=tmp_data[~(tmp_data["sample"].isin(signals))]
+        # s_data=tmp_data[tmp_data["sample_type"]=="signal"]
+        # b_data=tmp_data[tmp_data["sample_type"]=="background"]
+        # sns.kdeplot(data=s_data, x=x_var, hue="sample", weights=s_data["weight"], alpha=0.5, ax=ax, palette="tab20", common_norm=False, fill=True)
+        sns.kdeplot(data=tmp_data, x=x_var, hue="sample", weights=tmp_data["weight"], alpha=0.5, ax=ax, palette="tab20", common_norm=False, multiple="layer")
+        # plt.vlines([0.7, 1.3], ymin=0, ymax=ax.get_ylim()[1], colors="red")
+        plt.vlines([-60, 60], ymin=0, ymax=ax.get_ylim()[1], colors="red")
+        plt.vlines([-180, 180], ymin=0, ymax=ax.get_ylim()[1], colors="blue")
+        # ax.legend()
+        fig.savefig(f"plots/contour_plots/kde_plot_{x_var}_{topo}.png")
 
 def correlation_plot(data):
     fig, ax = plt.subplots()
+    straight_line=np.linspace(0,700,10)
+    band=100
+    straight_lower=np.linspace(0-band,700-band,10)
+    straight_upper=np.linspace(0+band,700+band,10)
+    ax.plot(straight_line, straight_line, "r-")
+    ax.plot(straight_line, straight_upper, "b-")
+    ax.plot(straight_line, straight_lower, "b-")
     sns.kdeplot(data=data, x="Met", y="pt_higgs", levels=[0.1], hue="sample", weights=data["weight"], alpha=0.5, ax=ax, palette="tab20", common_norm=False)
     fig.savefig(f"plots/contour_plots/correlation_plot.png")
 
@@ -258,7 +307,8 @@ def main():
 
     # plot_density(total_data)
     # make_scatter_plots(total_data)
-    # kde_plot(total_data)
+    kde_plot(total_data, "metpt_ratio")
+    kde_plot(total_data, "metpt_diff")
     # correlation_plot((total_data))
     # plt.show()
 
